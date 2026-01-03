@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  password  String
+  createdAt DateTime @default(now())
+
+  inquiries Inquiry[]
+}
+
+model Admin {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  password  String
+  role      AdminRole @default(ADMIN)
+  createdAt DateTime  @default(now())
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  products Product[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  price       Float?
+  createdAt   DateTime @default(now())
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  inquiries Inquiry[]
+}
+
+model Inquiry {
+  id        String   @id @default(uuid())
+  message   String
+  createdAt DateTime @default(now())
+
+  userId    String
+  productId String
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+enum AdminRole {
+  ADMIN
+  SUPER_ADMIN
+}
