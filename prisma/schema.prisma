@@ -21,12 +21,11 @@ model User {
 }
 
 model Admin {
-  id        String    @id @default(uuid())
-  name      String
-  email     String    @unique
+  id        String   @id @default(uuid())
+  email     String   @unique
   password  String
-  role      AdminRole @default(ADMIN)
-  createdAt DateTime  @default(now())
+  role      AdminRole
+  createdAt DateTime @default(now())
 }
 
 model Category {
