@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev src/index.ts",
     "build": "prisma generate && tsc",
-    "start": "node dist/index.js",
-    "prisma:generate": "npx prisma db push && npx prisma generate"
+    "start": "node dist/index.js"
   },
   "keywords": [],
   "author": "",
