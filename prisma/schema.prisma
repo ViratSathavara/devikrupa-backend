@@ -13,8 +13,11 @@ model User {
   phone     String?
   password  String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  inquiries Inquiry[]
+  inquiries        Inquiry[]
+  favoriteProducts Favorite[]
+  serviceInquiries ServiceInquiry[]
 }
 
 model Admin {
@@ -27,11 +30,21 @@ model Admin {
 }
 
 model Category {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
+  id           String         @id @default(uuid())
+  name         String
+  description  String?
+  
+  imageUrl     String?        // category image (separate from product images)
+  icon         String?
+  
+  displayOrder Int            @default(0)
+  status       CategoryStatus @default(ACTIVE)
+  seoTitle     String?
 
-  products Product[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  products     Product[]
 }
 
 model Product {
@@ -40,27 +53,126 @@ model Product {
   slug        String   @unique
   description String?
   price       Float?
-  createdAt   DateTime @default(now())
+  
+  // Stock Management
+  totalStock    Int     @default(0)
+  availableStock Int    @default(0)
+  soldQuantity  Int     @default(0)
+  status        ProductStatus @default(AVAILABLE)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
 
+  images           ProductImage[]
+  colors           ProductColor[]
+  inquiries        Inquiry[]
+  favorites        Favorite[]
+  stockHistory     StockHistory[]
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  url       String
+  alt       String?
+  isPrimary Boolean  @default(false)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model ProductColor {
+  id        String   @id @default(uuid())
+  name      String
+  hexCode   String?
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
   inquiries Inquiry[]
 }
 
-model Inquiry {
-  id        String   @id @default(uuid())
-  message   String
-  createdAt DateTime @default(now())
+model StockHistory {
+  id        String      @id @default(uuid())
+  quantity  Int
+  type      StockType
+  reason    String?
+  productId String
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+}
 
+model Favorite {
+  id        String   @id @default(uuid())
   userId    String
   productId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 
-  user    User    @relation(fields: [userId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  @@unique([userId, productId])
+}
+
+model Inquiry {
+  id        String        @id @default(uuid())
+  message   String
+  status    InquiryStatus @default(NEW)
+  quantity  Int?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  userId    String
+  productId String?
+  colorId   String?
+
+  user    User     @relation(fields: [userId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  color   ProductColor? @relation(fields: [colorId], references: [id])
+}
+
+model ServiceInquiry {
+  id            String           @id @default(uuid())
+  productName   String
+  productType   String           // e.g., "Water Pump", "Motor", etc.
+  brand         String?
+  model         String?
+  color         String?
+  warrantyInfo  String?
+  issueDescription String
+  additionalDetails String?
+  status        InquiryStatus    @default(NEW)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+enum CategoryStatus {
+  ACTIVE
+  HIDDEN
 }
 
 enum AdminRole {
   ADMIN
   SUPER_ADMIN
+}
+
+enum ProductStatus {
+  AVAILABLE
+  LOW_STOCK
+  OUT_OF_STOCK
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+enum StockType {
+  INCREASED
+  DECREASED
 }

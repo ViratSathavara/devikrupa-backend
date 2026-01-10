@@ -8,12 +8,17 @@ import productRoutes from "./routes/product.routes";
 import categoryRoutes from "./routes/category.routes";
 import adminAuthRoutes from "./routes/adminAuth.routes";
 import adminRoutes from "./routes/admin.routes";
-// import inquiryRoutes from "./routes/inquiry.routes";
+import inquiryRoutes from "./routes/inquiry.routes";
+import serviceInquiryRoutes from "./routes/serviceInquiry.routes";
+import favoriteRoutes from "./routes/favorite.routes";
 
 const app = express();
 
 /* Middlewares */
-app.use(cors());
+app.use(cors({
+  origin: ENV.CORS_ORIGINS,
+  credentials: true,
+}));
 app.use(express.json());
 
 /* Routes */
@@ -22,7 +27,9 @@ app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admins", adminRoutes);
-// app.use("/api/inquiries", inquiryRoutes);
+app.use("/api/inquiries", inquiryRoutes);
+app.use("/api/service-inquiries", serviceInquiryRoutes);
+app.use("/api/favorites", favoriteRoutes);
 
 /* Health Check */
 app.get("/", (_, res) => {

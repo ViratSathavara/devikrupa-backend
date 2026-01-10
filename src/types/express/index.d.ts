@@ -7,6 +7,10 @@ declare global {
         adminId: string;
         role: AdminRole;
       };
+      user?: {
+        userId: string;
+        email: string;
+      };
     }
   }
 }
