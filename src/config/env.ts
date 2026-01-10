@@ -6,5 +6,5 @@ export const ENV = {
   NODE_ENV: process.env.NODE_ENV || "development",
   JWT_SECRET: process.env.JWT_SECRET as string,
   DATABASE_URL: process.env.DATABASE_URL as string,
-  CORS_ORIGINS: process.env.CORS_ORIGINS?.split(",") || ["http://localhost:3000", "http://localhost:3001", "https://devikrupa-web-landing.netlify.app"],
+  CORS_ORIGINS: process.env.CORS_ORIGINS?.split(",") || ["http://localhost:3000", "http://localhost:3001", "https://devikrupa-web-landing.netlify.app", "https://devikrupa-web.vercel.app"],
 };
