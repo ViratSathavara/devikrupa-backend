@@ -47,6 +47,19 @@ model Category {
   products     Product[]
 }
 
+model Testimonial {
+  id        String   @id @default(uuid())
+  name      String
+  role      String
+  location  String
+  rating    Int      @default(5)
+  message   String
+  initials  String
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+}
+
 model Product {
   id          String   @id @default(uuid())
   name        String
@@ -148,19 +161,6 @@ model ServiceInquiry {
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
-}
-
-model Testimonial {
-  id        String   @id @default(uuid())
-  name      String
-  role      String
-  location  String
-  rating    Int      @default(5)
-  message   String
-  initials  String
-  isActive  Boolean  @default(true)
-
-  createdAt DateTime @default(now())
 }
 
 enum CategoryStatus {
