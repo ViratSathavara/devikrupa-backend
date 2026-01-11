@@ -9,11 +9,11 @@ export const seedDefaultAdmin = async () => {
     throw new Error("Admin seed ENV variables missing");
   }
 
-  const existingAdmin = await prisma.admin.findUnique({
+  const existing = await prisma.admin.findUnique({
     where: { email },
   });
 
-  if (existingAdmin) {
+  if (existing) {
     console.log("✅ Default admin already exists");
     return;
   }

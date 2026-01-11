@@ -16,10 +16,12 @@ import testimonialRoutes from "./routes/testimonial.routes";
 const app = express();
 
 /* Middlewares */
-app.use(cors({
-  origin: ENV.CORS_ORIGINS,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: ENV.CORS_ORIGINS,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 /* Routes */
@@ -38,8 +40,6 @@ app.get("/", (_, res) => {
   res.send("Devikrupa Backend is running 🚀");
 });
 
-app.listen(ENV.PORT, async () => {
-  console.log(`Server running on port http://localhost:${ENV.PORT}`);
-
-  await seedDefaultAdmin();
+app.listen(ENV.PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${ENV.PORT}`);
 });

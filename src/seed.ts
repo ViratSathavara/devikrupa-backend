@@ -1,4 +1,4 @@
-import "dotenv/config"; // 👈 REQUIRED
+import "dotenv/config";
 import { seedDefaultAdmin } from "./utils/seedAdmin";
 
 async function main() {
