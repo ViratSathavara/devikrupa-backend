@@ -12,6 +12,7 @@ import inquiryRoutes from "./routes/inquiry.routes";
 import serviceInquiryRoutes from "./routes/serviceInquiry.routes";
 import favoriteRoutes from "./routes/favorite.routes";
 import testimonialRoutes from "./routes/testimonial.routes";
+import uploadRoutes from "./routes/upload.routes";
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use("/api/inquiries", inquiryRoutes);
 app.use("/api/service-inquiries", serviceInquiryRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/testimonials", testimonialRoutes);
+app.use("/api/upload", uploadRoutes);
 
 /* Health Check */
 app.get("/", (_, res) => {
