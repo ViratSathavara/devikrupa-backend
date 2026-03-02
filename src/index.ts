@@ -112,7 +112,7 @@ app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(securityHeadersMiddleware);
 app.use(express.json({ limit: "1mb" }));
 
