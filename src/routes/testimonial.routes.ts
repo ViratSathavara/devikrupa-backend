@@ -9,10 +9,10 @@ import { adminMiddleware } from "../middlewares/admin.middleware";
 const router = Router();
 
 // Public
+router.post("/", createTestimonial);
 router.get("/", getTestimonials);
 
 // Admin only
-router.post("/", adminMiddleware, createTestimonial);
 router.delete("/:id", adminMiddleware, deleteTestimonial);
 
 export default router;

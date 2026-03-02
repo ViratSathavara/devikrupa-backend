@@ -3,17 +3,27 @@ import prisma from "../lib/prisma";
 import { AdminRequest } from "../types/admin-request";
 
 /**
- * CREATE TESTIMONIAL (ADMIN ONLY)
+ * CREATE TESTIMONIAL (PUBLIC)
  */
 export const createTestimonial = async (req: Request, res: Response) => {
   try {
     const { name, role, location, rating, message } = req.body;
 
-    if (!name || !message) {
+    const normalizedName = String(name ?? "").trim();
+    const normalizedMessage = String(message ?? "").trim();
+    const normalizedRole = String(role ?? "").trim() || "Customer";
+    const normalizedLocation = String(location ?? "").trim();
+
+    const parsedRating = Number.parseInt(String(rating ?? ""), 10);
+    const normalizedRating = Number.isNaN(parsedRating)
+      ? 5
+      : Math.max(1, Math.min(parsedRating, 5));
+
+    if (!normalizedName || !normalizedMessage) {
       return res.status(400).json({ message: "Name and message are required" });
     }
 
-    const initials = name
+    const initials = normalizedName
       .split(" ")
       .map((n: string) => n[0])
       .join("")
@@ -21,11 +31,11 @@ export const createTestimonial = async (req: Request, res: Response) => {
 
     const testimonial = await prisma.testimonial.create({
       data: {
-        name,
-        role: role || "Customer",
-        location: location || "",
-        rating: rating || 5,
-        message,
+        name: normalizedName,
+        role: normalizedRole,
+        location: normalizedLocation,
+        rating: normalizedRating,
+        message: normalizedMessage,
         initials,
       },
     });
