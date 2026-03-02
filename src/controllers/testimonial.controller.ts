@@ -3,7 +3,7 @@ import prisma from "../lib/prisma";
 import { AdminRequest } from "../types/admin-request";
 
 /**
- * CREATE TESTIMONIAL (PUBLIC)
+ * CREATE TESTIMONIAL (ADMIN ONLY)
  */
 export const createTestimonial = async (req: Request, res: Response) => {
   try {

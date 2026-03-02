@@ -163,6 +163,17 @@ model ServiceInquiry {
   user   User   @relation(fields: [userId], references: [id])
 }
 
+model PageConstructionSetting {
+  id                  String   @id @default(uuid())
+  path                String   @unique
+  label               String
+  isUnderConstruction Boolean  @default(false)
+  message             String?
+  updatedByAdminId    String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
 enum CategoryStatus {
   ACTIVE
   HIDDEN
