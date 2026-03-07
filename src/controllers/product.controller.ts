@@ -1,129 +1,352 @@
 import { Request, Response } from "express";
-import prisma from "../lib/prisma";
 import slugify from "slugify";
+import prisma from "../lib/prisma";
+import { localizeProduct } from "../services/localization.service";
+import { SupportedLanguage } from "../services/languageDetection.service";
+import { resolveBilingualText } from "../services/translation.service";
 import { AdminRequest } from "../types/admin-request";
+
+const getRequestedLanguage = (req: Request): SupportedLanguage =>
+  (req as any).requestedLanguage ?? "en";
+
+const isMissingColumnError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string };
+  return (
+    candidate.code === "P2022" ||
+    (typeof candidate.message === "string" &&
+      candidate.message.includes("does not exist in the current database"))
+  );
+};
+
+const parsePositiveInteger = (value: unknown, fallback = 0): number => {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+  return Math.max(0, parsed);
+};
+
+const parseNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const ensureAdminAccess = (adminReq: AdminRequest, res: Response): boolean => {
+  if (
+    !adminReq.admin ||
+    (adminReq.admin.role !== "ADMIN" && adminReq.admin.role !== "SUPER_ADMIN")
+  ) {
+    res.status(403).json({ message: "Admin access required" });
+    return false;
+  }
+  return true;
+};
+
+const mapColorPayload = async (
+  colors: Array<{ name?: string; name_en?: string; name_gu?: string; hexCode?: string }>,
+  sourceLang: SupportedLanguage
+) => {
+  const validColors = colors.filter(
+    (color) => String(color?.name ?? color?.name_en ?? color?.name_gu ?? "").trim() !== ""
+  );
+
+  return Promise.all(
+    validColors.map(async (color) => {
+      const resolvedName = await resolveBilingualText({
+        text: color.name,
+        textEn: color.name_en,
+        textGu: color.name_gu,
+        sourceLang,
+      });
+
+      const canonicalColorName =
+        resolvedName.textEn ?? resolvedName.textGu ?? String(color.name ?? "").trim();
+
+      return {
+        name: canonicalColorName,
+        name_en: resolvedName.textEn,
+        name_gu: resolvedName.textGu,
+        hexCode: color.hexCode || null,
+      };
+    })
+  );
+};
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
     const adminReq = req as AdminRequest;
-
-    if (
-      !adminReq.admin ||
-      (adminReq.admin.role !== "ADMIN" &&
-        adminReq.admin.role !== "SUPER_ADMIN")
-    ) {
-      return res.status(403).json({ message: "Admin access required" });
+    if (!ensureAdminAccess(adminReq, res)) {
+      return;
     }
 
+    const sourceLang = getRequestedLanguage(req);
     const {
       name,
+      name_en,
+      name_gu,
       description,
+      description_en,
+      description_gu,
       price,
       categoryId,
       images,
       colors,
       totalStock,
-      availableStock
+      availableStock,
     } = req.body;
 
-    if (!name || !categoryId) {
-      return res.status(400).json({ message: "Name and category are required" });
+    if (!categoryId) {
+      return res.status(400).json({ message: "Category is required" });
     }
 
-    const slug = slugify(name, { lower: true, strict: true });
+    const resolvedName = await resolveBilingualText({
+      text: name,
+      textEn: name_en,
+      textGu: name_gu,
+      sourceLang,
+    });
 
-    // Check if slug already exists
+    const resolvedDescription = await resolveBilingualText({
+      text: description,
+      textEn: description_en,
+      textGu: description_gu,
+      sourceLang,
+    });
+
+    const canonicalName = resolvedName.textEn ?? resolvedName.textGu;
+    if (!canonicalName) {
+      return res.status(400).json({ message: "Product name is required" });
+    }
+
+    const slug = slugify(canonicalName, { lower: true, strict: true });
     const existingProduct = await prisma.product.findUnique({
-      where: { slug }
+      where: { slug },
+      select: { id: true },
     });
 
     if (existingProduct) {
-      return res.status(400).json({ message: "Product with this name already exists" });
+      return res
+        .status(400)
+        .json({ message: "Product with this name already exists" });
     }
 
-    const stock = totalStock || 0;
-    const available = availableStock || stock;
+    const parsedPrice = parseNullableNumber(price);
+    if (price !== null && price !== undefined && price !== "" && parsedPrice === null) {
+      return res.status(400).json({ message: "Invalid price value" });
+    }
+
+    const stock = parsePositiveInteger(totalStock, 0);
+    const available =
+      availableStock === undefined || availableStock === null || availableStock === ""
+        ? stock
+        : parsePositiveInteger(availableStock, stock);
+
     const status =
       available === 0 ? "OUT_OF_STOCK" : available < 10 ? "LOW_STOCK" : "AVAILABLE";
 
+    const imagePayload = Array.isArray(images)
+      ? images
+          .filter((img) => String(img?.url ?? "").trim() !== "")
+          .map(
+            (
+              img: { url: string; alt?: string; isPrimary?: boolean },
+              index: number
+            ) => ({
+              url: img.url,
+              alt: img.alt || canonicalName,
+              isPrimary: img.isPrimary !== undefined ? img.isPrimary : index === 0,
+            })
+          )
+      : [];
+
+    const colorPayload = await mapColorPayload(
+      Array.isArray(colors) ? colors : [],
+      sourceLang
+    );
+
     const product = await prisma.product.create({
       data: {
-        name,
+        name: resolvedName.textEn ?? canonicalName,
+        name_en: resolvedName.textEn,
+        name_gu: resolvedName.textGu,
         slug,
-        description: description || null,
-        price: price || null,
+        description: resolvedDescription.textEn ?? resolvedDescription.textGu,
+        description_en: resolvedDescription.textEn,
+        description_gu: resolvedDescription.textGu,
+        price: parsedPrice,
         categoryId,
         totalStock: stock,
         availableStock: available,
-        soldQuantity: stock - available,
+        soldQuantity: Math.max(0, stock - available),
         status,
-        images: images && images.length > 0
-          ? {
-              create: images.map((img: { url: string; alt?: string; isPrimary?: boolean }, index: number) => ({
-                url: img.url,
-                alt: img.alt || name,
-                isPrimary: img.isPrimary !== undefined ? img.isPrimary : index === 0
-              }))
-            }
-          : undefined,
-        colors: colors && colors.length > 0
-          ? {
-              create: colors.map((color: { name: string; hexCode?: string }) => ({
-                name: color.name,
-                hexCode: color.hexCode || null
-              }))
-            }
-          : undefined
+        images:
+          imagePayload.length > 0
+            ? {
+                create: imagePayload,
+              }
+            : undefined,
+        colors:
+          colorPayload.length > 0
+            ? {
+                create: colorPayload,
+              }
+            : undefined,
       },
       include: {
         category: true,
         images: true,
-        colors: true
-      }
+        colors: true,
+      },
     });
 
-    res.status(201).json(product);
+    return res.status(201).json(localizeProduct(product, getRequestedLanguage(req)));
   } catch (error) {
     console.error("Create product error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const { categoryId, status, search } = req.query;
-
     const where: any = {};
+
     if (categoryId) where.categoryId = categoryId as string;
     if (status) where.status = status;
+
     if (search) {
+      const searchValue = String(search);
       where.OR = [
-        { name: { contains: search as string, mode: "insensitive" } },
-        { description: { contains: search as string, mode: "insensitive" } }
+        { name: { contains: searchValue, mode: "insensitive" } },
+        { name_en: { contains: searchValue, mode: "insensitive" } },
+        { name_gu: { contains: searchValue, mode: "insensitive" } },
+        { description: { contains: searchValue, mode: "insensitive" } },
+        { description_en: { contains: searchValue, mode: "insensitive" } },
+        { description_gu: { contains: searchValue, mode: "insensitive" } },
+        {
+          category: {
+            is: {
+              OR: [
+                { name: { contains: searchValue, mode: "insensitive" } },
+                { name_en: { contains: searchValue, mode: "insensitive" } },
+                { name_gu: { contains: searchValue, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
       ];
     }
 
-    const products = await prisma.product.findMany({
-      where,
-      include: {
-        category: true,
-        images: {
-          orderBy: [
-            { isPrimary: "desc" },
-            { createdAt: "asc" }
-          ]
+    let products: any[] = [];
+    try {
+      products = await prisma.product.findMany({
+        where,
+        include: {
+          category: true,
+          images: {
+            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          },
+          colors: true,
         },
-        colors: true
-      },
-      orderBy: {
-        createdAt: "desc"
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+    } catch (error) {
+      if (!isMissingColumnError(error)) {
+        throw error;
       }
-    });
 
-    res.json(products);
+      console.warn(
+        "Get products: multilingual columns are missing in DB, using legacy projection. Apply Prisma migrations."
+      );
+
+      const legacyWhere: any = {};
+      if (categoryId) legacyWhere.categoryId = categoryId as string;
+      if (status) legacyWhere.status = status;
+      if (search) {
+        const searchValue = String(search);
+        legacyWhere.OR = [
+          { name: { contains: searchValue, mode: "insensitive" } },
+          { description: { contains: searchValue, mode: "insensitive" } },
+          {
+            category: {
+              is: {
+                name: { contains: searchValue, mode: "insensitive" },
+              },
+            },
+          },
+        ];
+      }
+
+      products = await prisma.product.findMany({
+        where: legacyWhere,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          price: true,
+          totalStock: true,
+          availableStock: true,
+          soldQuantity: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+          categoryId: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              imageUrl: true,
+              icon: true,
+              displayOrder: true,
+              status: true,
+              seoTitle: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          images: {
+            select: {
+              id: true,
+              url: true,
+              alt: true,
+              isPrimary: true,
+              productId: true,
+              createdAt: true,
+            },
+            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+          },
+          colors: {
+            select: {
+              id: true,
+              name: true,
+              hexCode: true,
+              productId: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+    }
+
+    const language = getRequestedLanguage(req);
+    return res.json(products.map((product) => localizeProduct(product, language)));
   } catch (error) {
     console.error("Get products error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -135,75 +358,185 @@ export const getProductBySlug = async (req: Request, res: Response) => {
       include: {
         category: true,
         images: {
-          orderBy: [
-            { isPrimary: "desc" },
-            { createdAt: "asc" }
-          ]
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
         },
-        colors: true
-      }
+        colors: true,
+      },
     });
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Check if product is in user's favorites
     let isFavorite = false;
     if (user) {
       const favorite = await prisma.favorite.findUnique({
         where: {
           userId_productId: {
             userId: user.userId,
-            productId: product.id
-          }
-        }
+            productId: product.id,
+          },
+        },
       });
       isFavorite = !!favorite;
     }
 
-    res.json({ ...product, isFavorite });
+    const localizedProduct = localizeProduct(product, getRequestedLanguage(req));
+    return res.json({ ...localizedProduct, isFavorite });
   } catch (error) {
     console.error("Get product by slug error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const adminReq = req as AdminRequest;
-
-    if (!adminReq.admin) {
-      return res.status(403).json({ message: "Admin access required" });
+    if (!ensureAdminAccess(adminReq, res)) {
+      return;
     }
 
     const { id } = req.params;
     const {
       name,
+      name_en,
+      name_gu,
       description,
+      description_en,
+      description_gu,
       price,
       categoryId,
       images,
       colors,
       totalStock,
-      availableStock
+      availableStock,
     } = req.body;
 
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        totalStock: true,
+        availableStock: true,
+      },
+    });
+
+    if (!existingProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const sourceLang = getRequestedLanguage(req);
     const updateData: any = {};
 
-    if (name) {
-      updateData.name = name;
-      updateData.slug = slugify(name, { lower: true, strict: true });
+    const hasNameInput = [name, name_en, name_gu].some(
+      (value) => value !== undefined
+    );
+    if (hasNameInput) {
+      const resolvedName = await resolveBilingualText({
+        text: name,
+        textEn: name_en,
+        textGu: name_gu,
+        sourceLang,
+      });
+
+      const canonicalName = resolvedName.textEn ?? resolvedName.textGu;
+      if (!canonicalName) {
+        return res.status(400).json({ message: "Product name cannot be empty" });
+      }
+
+      const nextSlug = slugify(canonicalName, { lower: true, strict: true });
+      const slugConflict = await prisma.product.findFirst({
+        where: {
+          slug: nextSlug,
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+      if (slugConflict) {
+        return res
+          .status(400)
+          .json({ message: "Product with this name already exists" });
+      }
+
+      updateData.name = resolvedName.textEn ?? canonicalName;
+      updateData.name_en = resolvedName.textEn;
+      updateData.name_gu = resolvedName.textGu;
+      updateData.slug = nextSlug;
     }
-    if (description !== undefined) updateData.description = description;
-    if (price !== undefined) updateData.price = price;
+
+    const hasDescriptionInput = [description, description_en, description_gu].some(
+      (value) => value !== undefined
+    );
+    if (hasDescriptionInput) {
+      const resolvedDescription = await resolveBilingualText({
+        text: description,
+        textEn: description_en,
+        textGu: description_gu,
+        sourceLang,
+      });
+
+      updateData.description = resolvedDescription.textEn ?? resolvedDescription.textGu;
+      updateData.description_en = resolvedDescription.textEn;
+      updateData.description_gu = resolvedDescription.textGu;
+    }
+
+    if (price !== undefined) {
+      const parsedPrice = parseNullableNumber(price);
+      if (price !== null && price !== "" && parsedPrice === null) {
+        return res.status(400).json({ message: "Invalid price value" });
+      }
+      updateData.price = parsedPrice;
+    }
+
     if (categoryId) updateData.categoryId = categoryId;
-    if (totalStock !== undefined) updateData.totalStock = totalStock;
-    if (availableStock !== undefined) {
-      updateData.availableStock = availableStock;
-      updateData.soldQuantity = (totalStock || 0) - availableStock;
+
+    const nextTotalStock =
+      totalStock !== undefined
+        ? parsePositiveInteger(totalStock, existingProduct.totalStock)
+        : existingProduct.totalStock;
+    const nextAvailableStock =
+      availableStock !== undefined
+        ? parsePositiveInteger(availableStock, existingProduct.availableStock)
+        : existingProduct.availableStock;
+
+    if (totalStock !== undefined || availableStock !== undefined) {
+      updateData.totalStock = nextTotalStock;
+      updateData.availableStock = nextAvailableStock;
+      updateData.soldQuantity = Math.max(0, nextTotalStock - nextAvailableStock);
       updateData.status =
-        availableStock === 0 ? "OUT_OF_STOCK" : availableStock < 10 ? "LOW_STOCK" : "AVAILABLE";
+        nextAvailableStock === 0
+          ? "OUT_OF_STOCK"
+          : nextAvailableStock < 10
+            ? "LOW_STOCK"
+            : "AVAILABLE";
+    }
+
+    if (Array.isArray(images)) {
+      const imagePayload = images
+        .filter((img) => String(img?.url ?? "").trim() !== "")
+        .map(
+          (
+            img: { url: string; alt?: string; isPrimary?: boolean },
+            index: number
+          ) => ({
+            url: img.url,
+            alt: img.alt || updateData.name || "Product image",
+            isPrimary: img.isPrimary !== undefined ? img.isPrimary : index === 0,
+          })
+        );
+
+      updateData.images = {
+        deleteMany: {},
+        ...(imagePayload.length > 0 ? { create: imagePayload } : {}),
+      };
+    }
+
+    if (Array.isArray(colors)) {
+      const colorPayload = await mapColorPayload(colors, sourceLang);
+      updateData.colors = {
+        deleteMany: {},
+        ...(colorPayload.length > 0 ? { create: colorPayload } : {}),
+      };
     }
 
     const product = await prisma.product.update({
@@ -212,34 +545,35 @@ export const updateProduct = async (req: Request, res: Response) => {
       include: {
         category: true,
         images: true,
-        colors: true
-      }
+        colors: true,
+      },
     });
 
-    res.json(product);
+    return res.json(localizeProduct(product, getRequestedLanguage(req)));
   } catch (error) {
     console.error("Update product error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const updateStock = async (req: Request, res: Response) => {
   try {
     const adminReq = req as AdminRequest;
-
-    if (!adminReq.admin) {
-      return res.status(403).json({ message: "Admin access required" });
+    if (!ensureAdminAccess(adminReq, res)) {
+      return;
     }
 
     const { id } = req.params;
-    const { quantity, type, reason } = req.body; // type: "INCREASED" or "DECREASED"
+    const quantity = parsePositiveInteger(req.body.quantity, 0);
+    const type = String(req.body.type ?? "");
+    const reason = req.body.reason;
 
     if (!quantity || !type) {
       return res.status(400).json({ message: "Quantity and type are required" });
     }
 
     const product = await prisma.product.findUnique({
-      where: { id }
+      where: { id },
     });
 
     if (!product) {
@@ -256,54 +590,57 @@ export const updateStock = async (req: Request, res: Response) => {
     } else if (type === "DECREASED") {
       newAvailableStock = Math.max(0, newAvailableStock - quantity);
       newSoldQuantity += quantity;
+    } else {
+      return res.status(400).json({ message: "Invalid stock update type" });
     }
 
     const newStatus =
-      newAvailableStock === 0 ? "OUT_OF_STOCK" : newAvailableStock < 10 ? "LOW_STOCK" : "AVAILABLE";
+      newAvailableStock === 0
+        ? "OUT_OF_STOCK"
+        : newAvailableStock < 10
+          ? "LOW_STOCK"
+          : "AVAILABLE";
 
-    // Update product stock
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
         totalStock: newTotalStock,
         availableStock: newAvailableStock,
         soldQuantity: newSoldQuantity,
-        status: newStatus
-      }
+        status: newStatus,
+      },
     });
 
-    // Create stock history record
     await prisma.stockHistory.create({
       data: {
         productId: id,
         quantity,
         type,
-        reason: reason || null
-      }
+        reason: reason || null,
+      },
     });
 
-    res.json({
+    return res.json({
       message: "Stock updated successfully",
-      product: updatedProduct
+      product: localizeProduct(updatedProduct, getRequestedLanguage(req)),
     });
   } catch (error) {
     console.error("Update stock error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const adminReq = req as AdminRequest;
-
-    if (!adminReq.admin) {
-      return res.status(403).json({ message: "Admin access required" });
+    if (!ensureAdminAccess(adminReq, res)) {
+      return;
     }
 
     await prisma.product.delete({ where: { id: req.params.id } });
-    res.json({ message: "Product deleted successfully" });
+    return res.json({ message: "Product deleted successfully" });
   } catch (error) {
     console.error("Delete product error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

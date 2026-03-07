@@ -1,4 +1,10 @@
 {
+  "ts-node": {
+    "files": true
+  },
+  "files": [
+    "src/types/express.d.ts"
+  ],
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
@@ -6,11 +12,9 @@
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ]
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "baseUrl": "."
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "prisma.config.ts"]
 }

@@ -210,8 +210,6 @@ export const getPageConstructionSettings = async (
   res: Response
 ) => {
   try {
-    await syncKnownPaths();
-
     const settings = await prisma.pageConstructionSetting.findMany({
       orderBy: [{ path: "asc" }],
     });

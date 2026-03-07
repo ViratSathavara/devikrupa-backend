@@ -1,5 +1,10 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { localizeProduct } from "../services/localization.service";
+import { SupportedLanguage } from "../services/languageDetection.service";
+
+const getRequestedLanguage = (req: Request): SupportedLanguage =>
+  (req as any).requestedLanguage ?? "en";
 
 // Add to favorites
 export const addToFavorite = async (req: Request, res: Response) => {
@@ -59,9 +64,14 @@ export const addToFavorite = async (req: Request, res: Response) => {
       }
     });
 
+    const localizedFavorite = {
+      ...favorite,
+      product: localizeProduct(favorite.product, getRequestedLanguage(req)),
+    };
+
     res.status(201).json({
       message: "Added to favorites",
-      favorite
+      favorite: localizedFavorite
     });
   } catch (error) {
     console.error("Add to favorite error:", error);
@@ -125,7 +135,13 @@ export const getUserFavorites = async (req: Request, res: Response) => {
       }
     });
 
-    res.json(favorites);
+    const language = getRequestedLanguage(req);
+    res.json(
+      favorites.map((favorite) => ({
+        ...favorite,
+        product: localizeProduct(favorite.product, language),
+      }))
+    );
   } catch (error) {
     console.error("Get favorites error:", error);
     res.status(500).json({ message: "Internal server error" });

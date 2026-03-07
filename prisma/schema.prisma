@@ -18,6 +18,8 @@ model User {
   inquiries        Inquiry[]
   favoriteProducts Favorite[]
   serviceInquiries ServiceInquiry[]
+  chatConversations ChatConversation[]
+  chatMessages      ChatMessage[] @relation("ChatMessageUser")
 }
 
 model Admin {
@@ -27,12 +29,19 @@ model Admin {
   password  String
   role      AdminRole @default(ADMIN)
   createdAt DateTime  @default(now())
+
+  chatMessages         ChatMessage[]      @relation("ChatMessageAdmin")
+  closedConversations  ChatConversation[] @relation("ConversationClosedByAdmin")
 }
 
 model Category {
   id           String         @id @default(uuid())
   name         String
+  name_en      String?
+  name_gu      String?
   description  String?
+  description_en String?
+  description_gu String?
   
   imageUrl     String?        // category image (separate from product images)
   icon         String?
@@ -40,6 +49,8 @@ model Category {
   displayOrder Int            @default(0)
   status       CategoryStatus @default(ACTIVE)
   seoTitle     String?
+  seoTitle_en  String?
+  seoTitle_gu  String?
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -63,8 +74,12 @@ model Testimonial {
 model Product {
   id          String   @id @default(uuid())
   name        String
+  name_en     String?
+  name_gu     String?
   slug        String   @unique
   description String?
+  description_en String?
+  description_gu String?
   price       Float?
   
   // Stock Management
@@ -99,6 +114,8 @@ model ProductImage {
 model ProductColor {
   id        String   @id @default(uuid())
   name      String
+  name_en   String?
+  name_gu   String?
   hexCode   String?
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -131,6 +148,8 @@ model Favorite {
 model Inquiry {
   id        String        @id @default(uuid())
   message   String
+  message_en String?
+  message_gu String?
   status    InquiryStatus @default(NEW)
   quantity  Int?
   createdAt DateTime      @default(now())
@@ -148,13 +167,29 @@ model Inquiry {
 model ServiceInquiry {
   id            String           @id @default(uuid())
   productName   String
+  productName_en String?
+  productName_gu String?
   productType   String           // e.g., "Water Pump", "Motor", etc.
+  productType_en String?
+  productType_gu String?
   brand         String?
+  brand_en      String?
+  brand_gu      String?
   model         String?
+  model_en      String?
+  model_gu      String?
   color         String?
+  color_en      String?
+  color_gu      String?
   warrantyInfo  String?
+  warrantyInfo_en String?
+  warrantyInfo_gu String?
   issueDescription String
+  issueDescription_en String?
+  issueDescription_gu String?
   additionalDetails String?
+  additionalDetails_en String?
+  additionalDetails_gu String?
   status        InquiryStatus    @default(NEW)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -172,6 +207,120 @@ model PageConstructionSetting {
   updatedByAdminId    String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model ChatConversation {
+  id              String                  @id @default(uuid())
+  customerName    String
+  mobile          String
+  email           String?
+  status          ChatConversationStatus  @default(ACTIVE)
+  lastMessage     String?
+  lastMessageAt   DateTime?
+  adminLastReadAt DateTime?
+  customerLastReadAt DateTime?
+  closedAt        DateTime?
+  userId          String?
+  closedByAdminId String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  user            User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  closedByAdmin   Admin?                  @relation("ConversationClosedByAdmin", fields: [closedByAdminId], references: [id], onDelete: SetNull)
+  messages        ChatMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([lastMessageAt])
+}
+
+model ChatMessage {
+  id             String            @id @default(uuid())
+  conversationId String
+  senderType     ChatSenderType
+  message        String
+  userId         String?
+  adminId        String?
+  createdAt      DateTime          @default(now())
+
+  conversation   ChatConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User?             @relation("ChatMessageUser", fields: [userId], references: [id], onDelete: SetNull)
+  admin          Admin?            @relation("ChatMessageAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+model AIChatMessage {
+  id         Int      @id @default(autoincrement())
+  sessionId  String
+  sender     String   // "user" or "ai"
+  message    String
+  createdAt  DateTime @default(now())
+}
+
+model DictionaryWord {
+  id           Int      @id @default(autoincrement())
+  englishWord  String   @unique
+  gujaratiWord String   @unique
+  wordType     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model DictionaryPhrase {
+  id             Int      @id @default(autoincrement())
+  englishPhrase  String   @unique
+  gujaratiPhrase String   @unique
+  context        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TranslationRule {
+  id          Int      @id @default(autoincrement())
+  name        String?
+  sourceLang  String
+  targetLang  String
+  pattern     String
+  replacement String
+  priority    Int      @default(100)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sourceLang, targetLang, priority])
+}
+
+model TranslationCache {
+  id             Int      @id @default(autoincrement())
+  sourceLang     String
+  targetLang     String
+  originalText   String
+  normalizedText String
+  translatedText String
+  hitCount       Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastUsedAt     DateTime @default(now())
+
+  @@unique([sourceLang, targetLang, normalizedText], map: "translation_cache_lang_text_key")
+  @@index([sourceLang, targetLang, lastUsedAt])
+}
+
+model UnknownWord {
+  id                  Int      @id @default(autoincrement())
+  word                String
+  language            String
+  occurrences         Int      @default(1)
+  status              String   @default("NEW")
+  suggestedTranslation String?
+  resolvedTranslation  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  lastSeenAt          DateTime @default(now())
+
+  @@unique([word, language], map: "unknown_word_language_key")
+  @@index([status, lastSeenAt])
 }
 
 enum CategoryStatus {
@@ -199,4 +348,14 @@ enum InquiryStatus {
 enum StockType {
   INCREASED
   DECREASED
+}
+
+enum ChatConversationStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum ChatSenderType {
+  CUSTOMER
+  ADMIN
 }

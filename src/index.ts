@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { createServer } from "http";
 import cors, { CorsOptions } from "cors";
 import { ENV } from "./config/env";
 import { seedDefaultAdmin } from "./utils/seedAdmin";
@@ -14,14 +15,22 @@ import favoriteRoutes from "./routes/favorite.routes";
 import testimonialRoutes from "./routes/testimonial.routes";
 import uploadRoutes from "./routes/upload.routes";
 import pageConstructionRoutes from "./routes/pageConstruction.routes";
+import chatRoutes from "./routes/chat.routes";
 import { securityHeadersMiddleware } from "./middlewares/security.middleware";
 import {
   adminAuthRateLimiter,
   userAuthRateLimiter,
 } from "./middlewares/rateLimit.middleware";
+import { initializeSocketServer } from "./lib/socket";
+import aiRoutes from "./routes/ai.routes";
+import { languageMiddleware } from "./middlewares/language.middleware";
+import translationRoutes from "./routes/translation.routes";
 
 const app = express();
-const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
+require("dotenv").config();
+const LOCALHOST_HOSTNAMES = new Set(["localhost", "www.localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+const PRIVATE_IPV4_HOSTNAME_REGEX =
+  /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/;
 const WILDCARD_ORIGIN_REGEX = /^(https?):\/\/\*\.(.+)$/i;
 
 type WildcardOriginRule = {
@@ -78,6 +87,13 @@ const isOriginAllowed = (origin: string): boolean => {
     return true;
   }
 
+  const isPrivateNetworkHost =
+    PRIVATE_IPV4_HOSTNAME_REGEX.test(parsedOrigin.hostname) ||
+    parsedOrigin.hostname.endsWith(".local");
+  if (isPrivateNetworkHost) {
+    return true;
+  }
+
   if (exactAllowedOrigins.has(normalizedOrigin)) {
     return true;
   }
@@ -105,6 +121,7 @@ const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  optionsSuccessStatus: 204,
 };
 
 /* Middlewares */
@@ -115,6 +132,8 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(securityHeadersMiddleware);
 app.use(express.json({ limit: "1mb" }));
+app.use(languageMiddleware);
+app.use("/api/ai", aiRoutes);
 
 /* Routes */
 app.use("/api/auth", userAuthRateLimiter, authRoutes);
@@ -128,6 +147,8 @@ app.use("/api/favorites", favoriteRoutes);
 app.use("/api/testimonials", testimonialRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/page-settings", pageConstructionRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/translations", translationRoutes);
 
 app.use((error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (error instanceof Error && error.message.startsWith("Not allowed by CORS")) {
@@ -145,6 +166,9 @@ app.get("/", (_, res) => {
   res.send("Devikrupa Backend is running 🚀");
 });
 
-app.listen(ENV.PORT, () => {
+const httpServer = createServer(app);
+initializeSocketServer(httpServer, corsOptions);
+
+httpServer.listen(ENV.PORT, () => {
   console.log(`🚀 Server running at http://localhost:${ENV.PORT}`);
 });

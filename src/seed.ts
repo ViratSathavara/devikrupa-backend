@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { seedDefaultAdmin } from "./utils/seedAdmin";
+import { seedTranslationData } from "./utils/seedTranslationData";
 
 async function main() {
   await seedDefaultAdmin();
+  await seedTranslationData();
 }
 
 main()

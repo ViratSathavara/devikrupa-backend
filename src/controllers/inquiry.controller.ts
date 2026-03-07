@@ -1,8 +1,13 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { localizeInquiry } from "../services/localization.service";
+import { SupportedLanguage } from "../services/languageDetection.service";
+import { resolveBilingualText } from "../services/translation.service";
 
-// Get all inquiries (for admin)
-export const getAllInquiries = async (_req: Request, res: Response) => {
+const getRequestedLanguage = (req: Request): SupportedLanguage =>
+  (req as any).requestedLanguage ?? "en";
+
+export const getAllInquiries = async (req: Request, res: Response) => {
   try {
     const inquiries = await prisma.inquiry.findMany({
       include: {
@@ -11,30 +16,31 @@ export const getAllInquiries = async (_req: Request, res: Response) => {
             id: true,
             name: true,
             email: true,
-            phone: true
-          }
+            phone: true,
+          },
         },
         product: {
           include: {
             category: true,
-            images: true
-          }
+            images: true,
+            colors: true,
+          },
         },
-        color: true
+        color: true,
       },
       orderBy: {
-        createdAt: "desc"
-      }
+        createdAt: "desc",
+      },
     });
 
-    res.json(inquiries);
+    const language = getRequestedLanguage(req);
+    return res.json(inquiries.map((inquiry) => localizeInquiry(inquiry, language)));
   } catch (error) {
     console.error("Get inquiries error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Create product inquiry
 export const createInquiry = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -42,43 +48,59 @@ export const createInquiry = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const { productId, message, quantity, colorId } = req.body;
-
-    if (!productId || !message) {
-      return res.status(400).json({ message: "Product ID and message are required" });
+    const { productId, message, message_en, message_gu, quantity, colorId } = req.body;
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" });
     }
+
+    const resolvedMessage = await resolveBilingualText({
+      text: message,
+      textEn: message_en,
+      textGu: message_gu,
+    });
+
+    if (!resolvedMessage.textEn && !resolvedMessage.textGu) {
+      return res.status(400).json({ message: "Inquiry message is required" });
+    }
+
+    const parsedQuantity =
+      quantity === undefined || quantity === null || quantity === ""
+        ? null
+        : Math.max(1, Number.parseInt(String(quantity), 10));
 
     const inquiry = await prisma.inquiry.create({
       data: {
         userId: user.userId,
         productId,
-        message,
-        quantity: quantity || null,
+        message: resolvedMessage.textEn ?? resolvedMessage.textGu!,
+        message_en: resolvedMessage.textEn,
+        message_gu: resolvedMessage.textGu,
+        quantity: Number.isFinite(parsedQuantity as number) ? parsedQuantity : null,
         colorId: colorId || null,
-        status: "NEW"
+        status: "NEW",
       },
       include: {
         product: {
           include: {
             category: true,
-            images: true
-          }
+            images: true,
+            colors: true,
+          },
         },
-        color: true
-      }
+        color: true,
+      },
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Inquiry created successfully",
-      inquiry
+      inquiry: localizeInquiry(inquiry, getRequestedLanguage(req)),
     });
   } catch (error) {
     console.error("Create inquiry error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get user's inquiries
 export const getUserInquiries = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -88,30 +110,31 @@ export const getUserInquiries = async (req: Request, res: Response) => {
 
     const inquiries = await prisma.inquiry.findMany({
       where: {
-        userId: user.userId
+        userId: user.userId,
       },
       include: {
         product: {
           include: {
             category: true,
-            images: true
-          }
+            images: true,
+            colors: true,
+          },
         },
-        color: true
+        color: true,
       },
       orderBy: {
-        createdAt: "desc"
-      }
+        createdAt: "desc",
+      },
     });
 
-    res.json(inquiries);
+    const language = getRequestedLanguage(req);
+    return res.json(inquiries.map((inquiry) => localizeInquiry(inquiry, language)));
   } catch (error) {
     console.error("Get user inquiries error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Update inquiry status (admin only)
 export const updateInquiryStatus = async (req: Request, res: Response) => {
   try {
     const adminReq = req as any;
@@ -135,24 +158,26 @@ export const updateInquiryStatus = async (req: Request, res: Response) => {
             id: true,
             name: true,
             email: true,
-            phone: true
-          }
+            phone: true,
+          },
         },
         product: {
           include: {
             category: true,
-            images: true
-          }
-        }
-      }
+            images: true,
+            colors: true,
+          },
+        },
+        color: true,
+      },
     });
 
-    res.json({
+    return res.json({
       message: "Inquiry status updated",
-      inquiry
+      inquiry: localizeInquiry(inquiry, getRequestedLanguage(req)),
     });
   } catch (error) {
     console.error("Update inquiry status error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

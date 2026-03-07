@@ -1,4 +1,5 @@
 import { AdminRole } from "@prisma/client";
+import { SupportedLanguage } from "../services/languageDetection.service";
 
 declare global {
   namespace Express {
@@ -11,6 +12,7 @@ declare global {
         userId: string;
         email: string;
       };
+      requestedLanguage?: SupportedLanguage;
     }
   }
 }
