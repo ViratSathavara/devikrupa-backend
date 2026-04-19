@@ -14,7 +14,7 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
   });
 
   if (existingUser) {
-    throw new ConflictError("User already exists");
+    throw new ConflictError(`User with email "${email}" already exists. Please use a different email or login instead.`);
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);

@@ -7,7 +7,10 @@
     "dev": "ts-node-dev src/index.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "seed": "ts-node src/seed.ts"
+    "seed": "ts-node src/seed.ts",
+    "cleanup-test-users": "ts-node scripts/cleanup-test-users.ts",
+    "list-users": "ts-node scripts/list-users.ts",
+    "delete-user": "ts-node scripts/delete-user-by-email.ts"
   },
   "keywords": [],
   "author": "",
