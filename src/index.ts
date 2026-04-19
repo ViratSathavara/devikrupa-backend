@@ -16,16 +16,24 @@ import testimonialRoutes from "./routes/testimonial.routes";
 import uploadRoutes from "./routes/upload.routes";
 import pageConstructionRoutes from "./routes/pageConstruction.routes";
 import chatRoutes from "./routes/chat.routes";
+import productSearchRoutes from "./routes/productSearch.routes";
+import userRoutes from "./routes/user.routes";
+import bulkProductRoutes from "./routes/bulkProduct.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
+import activityLogRoutes from "./routes/activityLog.routes";
 import { securityHeadersMiddleware } from "./middlewares/security.middleware";
 import {
   adminAuthRateLimiter,
   userAuthRateLimiter,
   aiChatRateLimiter,
 } from "./middlewares/rateLimit.middleware";
+import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.middleware";
 import { initializeSocketServer } from "./lib/socket";
 import aiRoutes from "./routes/ai.routes";
 import { languageMiddleware } from "./middlewares/language.middleware";
 import translationRoutes from "./routes/translation.routes";
+import { logger } from "./utils/logger";
+import { cleanupExpiredTokens } from "./services/token.service";
 
 const app = express();
 require("dotenv").config();
@@ -139,9 +147,13 @@ app.use("/api/ai", aiChatRateLimiter, aiRoutes);
 /* Routes */
 app.use("/api/auth", userAuthRateLimiter, authRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/products", productSearchRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/admin/auth", adminAuthRateLimiter, adminAuthRoutes);
 app.use("/api/admins", adminRoutes);
+app.use("/api/admin/bulk", bulkProductRoutes);
+app.use("/api/admin/dashboard", dashboardRoutes);
+app.use("/api/admin/activity-logs", activityLogRoutes);
 app.use("/api/inquiries", inquiryRoutes);
 app.use("/api/service-inquiries", serviceInquiryRoutes);
 app.use("/api/favorites", favoriteRoutes);
@@ -150,6 +162,7 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/page-settings", pageConstructionRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/translations", translationRoutes);
+app.use("/api/users", userRoutes);
 
 app.use((error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (error instanceof Error && error.message.startsWith("Not allowed by CORS")) {
@@ -162,6 +175,10 @@ app.use((error: unknown, req: express.Request, res: express.Response, next: expr
   return next(error);
 });
 
+/* Error Handlers */
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 /* Health Check */
 app.get("/", (_, res) => {
   res.send("Devikrupa Backend is running 🚀");
@@ -171,5 +188,15 @@ const httpServer = createServer(app);
 initializeSocketServer(httpServer, corsOptions);
 
 httpServer.listen(ENV.PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${ENV.PORT}`);
+  logger.info(`🚀 Server running at http://localhost:${ENV.PORT}`);
+  
+  // Seed default admin
+  seedDefaultAdmin();
+  
+  // Cleanup expired tokens every hour
+  setInterval(() => {
+    cleanupExpiredTokens().catch((err) => {
+      logger.error("Failed to cleanup expired tokens", { error: err });
+    });
+  }, 60 * 60 * 1000);
 });

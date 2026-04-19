@@ -53,13 +53,68 @@ export const createTestimonial = async (req: Request, res: Response) => {
 export const getTestimonials = async (_: Request, res: Response) => {
   try {
     const testimonials = await prisma.testimonial.findMany({
-      where: { isActive: true },
+      where: { isActive: true, isApproved: true },
       orderBy: { createdAt: "desc" },
     });
 
     res.json(testimonials);
   } catch (error) {
     console.error("Get testimonials error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * GET ALL TESTIMONIALS (ADMIN ONLY)
+ */
+export const getAllTestimonials = async (req: Request, res: Response) => {
+  try {
+    const adminReq = req as AdminRequest;
+
+    if (
+      !adminReq.admin ||
+      (adminReq.admin.role !== "ADMIN" &&
+        adminReq.admin.role !== "SUPER_ADMIN")
+    ) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    const testimonials = await prisma.testimonial.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(testimonials);
+  } catch (error) {
+    console.error("Get all testimonials error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * APPROVE TESTIMONIAL (ADMIN ONLY)
+ */
+export const approveTestimonial = async (req: Request, res: Response) => {
+  try {
+    const adminReq = req as AdminRequest;
+
+    if (
+      !adminReq.admin ||
+      (adminReq.admin.role !== "ADMIN" &&
+        adminReq.admin.role !== "SUPER_ADMIN")
+    ) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    const { id } = req.params;
+
+    const testimonial = await prisma.testimonial.update({
+      where: { id },
+      data: { isApproved: true, isActive: true },
+    });
+
+    res.json({ message: "Testimonial approved successfully", testimonial });
+  } catch (error) {
+    console.error("Approve testimonial error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

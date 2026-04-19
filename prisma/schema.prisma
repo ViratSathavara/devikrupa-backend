@@ -3,9 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+  provider = "postgresql"
 }
 
 model User {
@@ -22,6 +20,7 @@ model User {
   serviceInquiries ServiceInquiry[]
   chatConversations ChatConversation[]
   chatMessages      ChatMessage[] @relation("ChatMessageUser")
+  refreshTokens     RefreshToken[]
 }
 
 model Admin {
@@ -34,6 +33,8 @@ model Admin {
 
   chatMessages         ChatMessage[]      @relation("ChatMessageAdmin")
   closedConversations  ChatConversation[] @relation("ConversationClosedByAdmin")
+  refreshTokens        RefreshToken[]
+  activityLogs         AdminActivityLog[]
 }
 
 model Category {
@@ -58,19 +59,6 @@ model Category {
   updatedAt    DateTime @updatedAt
 
   products     Product[]
-}
-
-model Testimonial {
-  id        String   @id @default(uuid())
-  name      String
-  role      String
-  location  String
-  rating    Int      @default(5)
-  message   String
-  initials  String
-  isActive  Boolean  @default(true)
-
-  createdAt DateTime @default(now())
 }
 
 model Product {
@@ -323,6 +311,54 @@ model UnknownWord {
 
   @@unique([word, language], map: "unknown_word_language_key")
   @@index([status, lastSeenAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String?
+  adminId   String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admin Admin? @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model AdminActivityLog {
+  id          String   @id @default(uuid())
+  adminId     String
+  action      String   // e.g., "CREATE_PRODUCT", "UPDATE_CATEGORY", "DELETE_USER"
+  entityType  String   // e.g., "Product", "Category", "User"
+  entityId    String?
+  details     String?  // JSON string with additional details
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Testimonial {
+  id        String   @id @default(uuid())
+  name      String
+  role      String
+  location  String
+  rating    Int      @default(5)
+  message   String
+  initials  String
+  isActive  Boolean  @default(true)
+  isApproved Boolean @default(false)
+
+  createdAt DateTime @default(now())
 }
 
 enum CategoryStatus {
