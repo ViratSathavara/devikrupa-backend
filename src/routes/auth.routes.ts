@@ -6,7 +6,9 @@ import {
   logout, 
   getProfile, 
   updateProfile, 
-  changePassword 
+  changePassword,
+  verifyEmailOTP,
+  resendOTP
 } from "../controllers/auth.controller";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { validateBody } from "../middlewares/validate.middleware";
@@ -16,6 +18,8 @@ const router = Router();
 
 router.post("/signup", validateBody(signupSchema), signup);
 router.post("/login", validateBody(loginSchema), login);
+router.post("/verify-email", verifyEmailOTP);
+router.post("/resend-otp", resendOTP);
 router.post("/refresh", refreshAccessToken);
 router.post("/logout", logout);
 
