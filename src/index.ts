@@ -21,6 +21,7 @@ import userRoutes from "./routes/user.routes";
 import bulkProductRoutes from "./routes/bulkProduct.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import activityLogRoutes from "./routes/activityLog.routes";
+import adminUserRoutes from "./routes/adminUser.routes";
 import { securityHeadersMiddleware } from "./middlewares/security.middleware";
 import {
   adminAuthRateLimiter,
@@ -154,6 +155,7 @@ app.use("/api/admins", adminRoutes);
 app.use("/api/admin/bulk", bulkProductRoutes);
 app.use("/api/admin/dashboard", dashboardRoutes);
 app.use("/api/admin/activity-logs", activityLogRoutes);
+app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/inquiries", inquiryRoutes);
 app.use("/api/service-inquiries", serviceInquiryRoutes);
 app.use("/api/favorites", favoriteRoutes);
