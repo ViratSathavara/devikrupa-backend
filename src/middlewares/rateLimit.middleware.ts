@@ -67,3 +67,9 @@ export const adminAuthRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   message: "Too many admin login attempts. Please try again later.",
 });
+
+export const aiChatRateLimiter = createRateLimiter({
+  max: 20,
+  windowMs: 60 * 1000, // 20 requests per minute
+  message: "Too many AI chat requests. Please slow down.",
+});

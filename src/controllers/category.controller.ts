@@ -324,3 +324,93 @@ export const deleteCategory = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Failed to delete category" });
   }
 };
+
+export const importCategories = async (req: Request, res: Response) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded" });
+  }
+
+  try {
+    const xlsx = await import("xlsx");
+    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data: any[] = xlsx.utils.sheet_to_json(worksheet);
+
+    const categories = await Promise.all(
+      data.map(async (row) => {
+        const {
+          name,
+          name_en,
+          name_gu,
+          description,
+          description_en,
+          description_gu,
+          imageUrl,
+          icon,
+          displayOrder,
+          status,
+          seoTitle,
+          seoTitle_en,
+          seoTitle_gu,
+        } = row;
+
+        const sourceLang = getRequestedLanguage(req);
+        const resolvedName = await resolveBilingualText({
+          text: name,
+          textEn: name_en,
+          textGu: name_gu,
+          sourceLang,
+        });
+
+        if (!resolvedName.textEn && !resolvedName.textGu) {
+          return null;
+        }
+
+        const resolvedDescription = await resolveBilingualText({
+          text: description,
+          textEn: description_en,
+          textGu: description_gu,
+          sourceLang,
+        });
+
+        const resolvedSeoTitle = await resolveBilingualText({
+          text: seoTitle,
+          textEn: seoTitle_en,
+          textGu: seoTitle_gu,
+          sourceLang,
+        });
+
+        return prisma.category.create({
+          data: {
+            name: resolvedName.textEn ?? resolvedName.textGu!,
+            name_en: resolvedName.textEn,
+            name_gu: resolvedName.textGu,
+            description:
+              resolvedDescription.textEn ?? resolvedDescription.textGu,
+            description_en: resolvedDescription.textEn,
+            description_gu: resolvedDescription.textGu,
+            imageUrl: imageUrl || null,
+            icon: icon || null,
+            displayOrder: Number.isFinite(Number(displayOrder))
+              ? Number(displayOrder)
+              : 0,
+            status: normalizeCategoryStatus(status),
+            seoTitle: resolvedSeoTitle.textEn ?? resolvedSeoTitle.textGu,
+            seoTitle_en: resolvedSeoTitle.textEn,
+            seoTitle_gu: resolvedSeoTitle.textGu,
+          },
+        });
+      })
+    );
+
+    const validCategories = categories.filter((c) => c !== null);
+
+    return res
+      .status(201)
+      .json({ message: `Successfully imported ${validCategories.length} categories` });
+  } catch (error) {
+    console.error("Import categories error:", error);
+    return res.status(500).json({ message: "Failed to import categories" });
+  }
+};

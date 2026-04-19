@@ -20,6 +20,7 @@ import { securityHeadersMiddleware } from "./middlewares/security.middleware";
 import {
   adminAuthRateLimiter,
   userAuthRateLimiter,
+  aiChatRateLimiter,
 } from "./middlewares/rateLimit.middleware";
 import { initializeSocketServer } from "./lib/socket";
 import aiRoutes from "./routes/ai.routes";
@@ -133,7 +134,7 @@ app.options(/.*/, cors(corsOptions));
 app.use(securityHeadersMiddleware);
 app.use(express.json({ limit: "1mb" }));
 app.use(languageMiddleware);
-app.use("/api/ai", aiRoutes);
+app.use("/api/ai", aiChatRateLimiter, aiRoutes);
 
 /* Routes */
 app.use("/api/auth", userAuthRateLimiter, authRoutes);

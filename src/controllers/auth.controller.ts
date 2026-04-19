@@ -7,21 +7,18 @@ import { ENV } from "../config/env";
 export const signup = async (req: Request, res: Response) => {
   try {
     const { name, email, password, phone } = req.body;
-    console.log(name, email, password, phone)
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Name, email, and password are required" });
     }
 
-    // const existingUser = await prisma.user.findUnique({
-    //   where: { email }
-    // });
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
 
-    // console.log('existingUser', existingUser)
-
-    // if (existingUser) {
-    //   return res.status(400).json({ message: "User already exists" });
-    // }
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 

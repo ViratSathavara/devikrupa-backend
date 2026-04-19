@@ -13,8 +13,8 @@ const router = Router();
 
 router.post("/", adminMiddleware, createAdmin);
 router.get("/", adminMiddleware, getAdmins);
-router.get("/admin/:id", getAdminById);
-router.put("/admin/:id", updateAdmin);
+router.get("/admin/:id", adminMiddleware, getAdminById);
+router.put("/admin/:id", adminMiddleware, updateAdmin);
 router.delete("/:id", adminMiddleware, deleteAdmin);
 router.get("/dashboard/cards", adminMiddleware, dashboardCardsItem);
 
